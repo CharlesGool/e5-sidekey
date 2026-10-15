@@ -4,8 +4,9 @@
 // the motor pulses once and the hotspot turns on or off (the release then does
 // nothing more).  With "page", the key lock on, or the app removed (no /mode)
 // the key is the screen's own again.  Like the power menu (power-menu.js):
-// capturing keydown/keyup listeners on the window, before the screen's own on
-// the document, and on each plugin frame's window (T551MPower.attach).
+// capturing keydown/keyup listeners on the window -- index.html's, added
+// before mobile.js's lock screen ones -- and on each plugin frame's window
+// (T551MPower.attach).
 let sidekeyMode = null, sidekeyAt = -Infinity, sidekeyHeld = null, sidekeyPass = false;
 function sidekeyFetch() {
 	sidekeyAt = performance.now();
@@ -97,7 +98,10 @@ function sidekeyAttach(win, fromFrame) {
 	win.addEventListener('keydown', (e) => sidekeyKey(e, fromFrame), true);
 	win.addEventListener('keyup', (e) => sidekeyKey(e, fromFrame), true);
 }
-sidekeyAttach(window, false);
+// the main window: through index.html's early listener (before mobile.js's
+// lock screen) when it is there, else listeners of our own
+window.e5Sidekey = (e) => sidekeyKey(e, false);
+if (!window.e5SidekeyEarly) sidekeyAttach(window, false);
 {
 	const attach = T551MPower.attach;
 	T551MPower.attach = (win) => { attach(win); sidekeyAttach(win, true); };

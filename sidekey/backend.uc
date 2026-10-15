@@ -3,16 +3,18 @@
 // hotspot turns on or off.  The key is the screen's own (app.js, its keydown
 // listener), so this patches app.js with patch.js, put in before the key lock:
 // its listeners come before the screen's, ask GET /mode, and take the key
-// when it is ours.  An
-// image update brings an unpatched app.js: the notification poll (manifest
-// "notifications") patches it again; the screen restarts once after each
-// patch, to load it.  With the app removed there is no /mode and the key
-// opens the hotspot page again; POST /unpatch takes the block out.
+// when it is ours.  The lock screen (mobile.js) takes every key but power and
+// volume with a listener added before app.js's, so index.html gets early.html
+// too, before mobile.js: a listener ahead of it that hands the key to app.js's
+// block.  An image update brings unpatched files: the notification poll
+// (manifest "notifications") patches them again; the screen restarts once
+// after each patch, to load it.  With the app removed there is no /mode and
+// the key is the screen's own again; POST /unpatch takes the blocks out.
 //
 //   GET  /mode            {toggle, hold, dark, vibrate}, for the patched app.js
 //   GET  /status          the settings and the patch
 //   POST /mode            {"mode": "toggle"|"page"}
-//   POST /unpatch         app.js as it came, the screen restarted
+//   POST /unpatch         app.js and index.html as they came, the screen restarted
 //   GET  /notifications   (none: only the patch check, once a minute)
 
 'use strict';
@@ -20,12 +22,17 @@
 import { readfile, writefile, rename, stat } from 'fs';
 
 const DIR = '/etc/e5-infoscreen/plugins/sidekey';
-const APP = '/usr/share/e5-infoscreen/www/app.js';
+const WWW = '/usr/share/e5-infoscreen/www';
 const CFG = 'e5-plugin-sidekey';
-const ANCHOR = '/* ---------- key lock ---------- */';
-const BEGIN = '/* BEGIN e5-sidekey';
-const END = '/* END e5-sidekey */\n';
 const MODES = [ 'toggle', 'page' ];
+// the files patched: a block of ours put in before an anchor
+const FILES = [
+	{ file: `${WWW}/app.js`, block: 'patch.js', anchor: '/* ---------- key lock ---------- */',
+	  begin: '/* BEGIN e5-sidekey', end: '/* END e5-sidekey */\n', need: true },
+	// (a screen without mobile.js has no lock screen: nothing to get ahead of)
+	{ file: `${WWW}/index.html`, block: 'early.html', anchor: '<script src="mobile.js"></script>',
+	  begin: '<script>/* BEGIN e5-sidekey', end: '/* END e5-sidekey */</script>\n', need: false }
+];
 
 return function(ctx) {
 	function count(s, part) { return length(split(s, part)) - 1; }
@@ -42,11 +49,11 @@ return function(ctx) {
 		return { mode, toggle: mode == 'toggle', hold, dark, vibrate };
 	}
 
-	// app.js without our block
-	function strip(src) {
-		let b = index(src, BEGIN), e = index(src, END);
+	// a file without our block
+	function strip(f, src) {
+		let b = index(src, f.begin), e = index(src, f.end);
 		if (b < 0 || e < b) return null;
-		return substr(src, 0, b) + substr(src, e + length(END));
+		return substr(src, 0, b) + substr(src, e + length(f.end));
 	}
 
 	function restart_screen() {
@@ -54,45 +61,58 @@ return function(ctx) {
 		ctx.run("setsid sh -c 'sleep 2; /etc/init.d/e5-infoscreen restart' >/dev/null 2>&1 &");
 	}
 
-	function write_app(src) {
-		let tmp = APP + '.sidekey-new';
-		if (writefile(tmp, src) == null || !rename(tmp, APP)) {
+	function write(path, src) {
+		let tmp = path + '.sidekey-new';
+		if (writefile(tmp, src) == null || !rename(tmp, path)) {
 			ctx.run(`rm -f '${tmp}'`);
 			return false;
 		}
 		return true;
 	}
 
-	function patch_state() {
-		let src = readfile(APP), want = readfile(`${DIR}/patch.js`);
-		if (src == null || want == null) return { patched: false, error: 'missing app.js or patch.js' };
+	// one file: {patched, current}, {patched: false, error}, or {absent} (an
+	// optional file without its anchor: nothing to patch); with fix, the file
+	// patched with this version's block first ({changed} when it was written)
+	function file_state(f, fix) {
+		let src = readfile(f.file), want = readfile(`${DIR}/${f.block}`);
+		if (src == null || want == null) return { patched: false, error: `missing ${f.file} or ${f.block}` };
 		if (index(src, want) >= 0) return { patched: true, current: true };
-		if (index(src, BEGIN) >= 0) return { patched: true, current: false };
-		let ok = count(src, ANCHOR) == 1;
-		return { patched: false, patchable: ok, error: ok ? null : 'this screen version has no single key lock section' };
+		let old = index(src, f.begin) >= 0;
+		if (!fix && old) return { patched: true, current: false };
+		if (fix && old) {
+			src = strip(f, src);            // an older block: out first
+			if (src == null) return { patched: false, error: `${f.file}: cannot remove the older patch` };
+		}
+		if (count(src, f.anchor) != 1)
+			return f.need ? { patched: false, error: `${f.file}: no single place for the patch` } : { absent: true };
+		if (!fix) return { patched: false };
+		let parts = split(src, f.anchor);
+		if (!write(f.file, parts[0] + want + f.anchor + parts[1]))
+			return { patched: false, error: `cannot write ${f.file}` };
+		return { patched: true, current: true, changed: true };
 	}
 
-	// app.js with this version of patch.js; the screen restarted when it changed
-	function ensure_patch() {
-		let src = readfile(APP), want = readfile(`${DIR}/patch.js`);
-		if (src == null || want == null) return patch_state();
-		if (index(src, want) >= 0) return { patched: true, current: true };
-		if (index(src, BEGIN) >= 0) {
-			src = strip(src);               // an older patch.js: out first
-			if (src == null) return { patched: false, error: 'cannot remove the older patch' };
+	// all files, as one state for the page
+	function patch(fix) {
+		let all = { patched: true, current: true }, changed = false;
+		for (let f in FILES) {
+			let s = file_state(f, fix);
+			if (s.absent) continue;
+			if (s.changed) changed = true;
+			if (s.error) all = { patched: false, error: s.error };
+			else if (!s.patched) { if (!all.error) all.patched = false; }
+			else if (!s.current) all.current = false;
 		}
-		if (count(src, ANCHOR) != 1)
-			return { patched: false, error: 'this screen version has no single key lock section: not patched' };
-		let parts = split(src, ANCHOR);
-		if (!write_app(parts[0] + want + ANCHOR + parts[1]))
-			return { patched: false, error: 'cannot write app.js' };
-		ctx.log('app.js patched (side key), the screen restarts');
-		restart_screen();
-		return { patched: true, current: true, restarting: true };
+		if (changed) {
+			ctx.log('app.js / index.html patched (side key), the screen restarts');
+			restart_screen();
+			all.restarting = true;
+		}
+		return all;
 	}
 
 	function status() {
-		return { ...settings(), patch: patch_state() };
+		return { ...settings(), patch: patch(false) };
 	}
 
 	return {
@@ -100,8 +120,7 @@ return function(ctx) {
 			return settings();
 		},
 		'GET /status': function(req) {
-			let p = ensure_patch();
-			return { ...settings(), patch: p };
+			return { ...settings(), patch: patch(true) };
 		},
 		'POST /mode': function(req) {
 			let mode = req.body?.mode;
@@ -117,20 +136,24 @@ return function(ctx) {
 			return status();
 		},
 		'POST /unpatch': function(req) {
-			let src = readfile(APP);
-			if (src == null || index(src, BEGIN) < 0)
-				return status();
-			src = strip(src);
-			if (src == null || !write_app(src))
-				return { status: 500, type: 'application/json', body: '{"error":"cannot restore app.js"}' };
-			ctx.log('app.js restored (side key), the screen restarts');
+			let changed = false;
+			for (let f in FILES) {
+				let src = readfile(f.file);
+				if (src == null || index(src, f.begin) < 0) continue;
+				src = strip(f, src);
+				if (src == null || !write(f.file, src))
+					return { status: 500, type: 'application/json', body: `{"error":"cannot restore ${f.file}"}` };
+				changed = true;
+			}
+			if (!changed) return status();
+			ctx.log('app.js / index.html restored (side key), the screen restarts');
 			restart_screen();
 			return { ...status(), restarting: true };
 		},
 		'GET /notifications': function(req) {
 			if (!ctx.state_get('checked', 60)) {
 				ctx.state_put('checked', { at: time() });
-				ensure_patch();
+				patch(true);
 			}
 			return { notifications: [] };
 		}
