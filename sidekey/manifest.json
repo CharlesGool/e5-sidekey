@@ -1,0 +1,45 @@
+{
+	"id": "sidekey",
+	"api_version": 2,
+	"version": "1.1",
+	"name": { "zh": "侧键开关热点", "en": "Side Key Hotspot" },
+	"description": { "zh": "单击侧键打开热点页，长按震动并开关热点", "en": "Tap the side key for the hotspot page, hold it to turn the hotspot on or off" },
+	"entry": "index.html",
+	"order": 44,
+	"notifications": true,
+	"settings": [
+		{
+			"id": "mode", "type": "choice", "uci": "e5-plugin-sidekey.settings.mode", "default": "toggle",
+			"label": { "zh": "长按侧键", "en": "Holding the side key" },
+			"options": [
+				{ "value": "toggle", "label": { "zh": "开关热点", "en": "Hotspot on / off" } },
+				{ "value": "page", "label": { "zh": "和单击一样，打开热点页（原样）", "en": "Hotspot page, as a tap (unchanged)" } }
+			]
+		},
+		{
+			"id": "hold", "type": "choice", "uci": "e5-plugin-sidekey.settings.hold", "default": "800",
+			"label": { "zh": "长按时间", "en": "Hold for" },
+			"options": [
+				{ "value": "500", "label": { "zh": "0.5 秒", "en": "0.5 s" } },
+				{ "value": "800", "label": { "zh": "0.8 秒", "en": "0.8 s" } },
+				{ "value": "1200", "label": { "zh": "1.2 秒", "en": "1.2 s" } },
+				{ "value": "2000", "label": { "zh": "2 秒", "en": "2 s" } }
+			]
+		},
+		{
+			"id": "dark", "type": "toggle", "uci": "e5-plugin-sidekey.settings.dark", "default": "1",
+			"label": { "zh": "熄屏时也能开关", "en": "Also with the screen dark" },
+			"note": { "zh": "关闭后，熄屏时长按侧键只点亮屏幕；单击始终只点亮屏幕", "en": "Off: with the screen dark holding it only wakes it; a tap always only wakes it" }
+		},
+		{
+			"id": "vibrate", "type": "choice", "uci": "e5-plugin-sidekey.settings.vibrate", "default": "100",
+			"label": { "zh": "震动", "en": "Vibration" },
+			"options": [
+				{ "value": "0", "label": { "zh": "不震动", "en": "None" } },
+				{ "value": "60", "label": { "zh": "短", "en": "Short" } },
+				{ "value": "100", "label": { "zh": "中", "en": "Medium" } },
+				{ "value": "200", "label": { "zh": "长", "en": "Long" } }
+			]
+		}
+	]
+}
