@@ -56,9 +56,11 @@ function draw() {
 	const vib = st.vibrate > 0, sec = (st.hold / 1000).toFixed(1).replace(/\.0$/, '');
 	$('note').textContent = st.mode == 'toggle' ? e5.t({
 		zh: `单击侧键打开热点页；按住 ${sec} 秒` + (vib ? '马达震动一下，' : '') + '开关热点' +
-			(st.dark ? '，熄屏时也能开关，不点亮屏幕' : '，熄屏时只点亮屏幕') + '。按键锁定时侧键不起作用。',
+			(st.dark ? '，熄屏时也能开关，不点亮屏幕' : '，熄屏时只点亮屏幕') +
+			(st.locked ? '。按键锁定（含音量键关闭屏幕）时也能长按开关，屏幕保持关闭。' : '。按键锁定时侧键不起作用。'),
 		en: `Tap the side key for the hotspot page; hold it ${sec} s` + (vib ? ' (a buzz)' : '') + ' to turn the hotspot on or off' +
-			(st.dark ? ', also with the screen dark, which stays dark' : '; with the screen dark it only wakes it') + '. Not while the keys are locked.'
+			(st.dark ? ', also with the screen dark, which stays dark' : '; with the screen dark it only wakes it') +
+			(st.locked ? '. Holding works with the keys locked too (the volume keys\' cut-off included); the screen stays off.' : '. Not while the keys are locked.')
 	}) : e5.t({ zh: '侧键打开热点页，和原来一样。', en: 'The side key opens the hotspot page, as before.' });
 }
 

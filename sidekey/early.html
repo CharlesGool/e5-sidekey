@@ -1,0 +1,9 @@
+<script>/* BEGIN e5-sidekey (the sidekey app, /etc/e5-infoscreen/plugins/sidekey) */
+// The side key, before mobile.js: its lock screen takes every key but power
+// and volume with a capturing listener on the window, added before app.js's
+// (where the sidekey block is), so this one comes first and hands the key to
+// window.e5Sidekey (set by app.js).
+window.e5SidekeyEarly = true;
+for (const type of ['keydown', 'keyup'])
+	window.addEventListener(type, (e) => { if (window.e5Sidekey) window.e5Sidekey(e); }, true);
+/* END e5-sidekey */</script>

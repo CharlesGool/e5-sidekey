@@ -1,11 +1,13 @@
 /* BEGIN e5-sidekey (the sidekey app, /etc/e5-infoscreen/plugins/sidekey) */
 // The side key (F1), as the sidekey app's GET /mode says ({toggle, hold,
-// dark, vibrate}): a tap opens the hotspot page as before; held for `hold` ms
-// the motor pulses once and the hotspot turns on or off (the release then does
-// nothing more).  With "page", the key lock on, or the app removed (no /mode)
-// the key is the screen's own again.  Like the power menu (power-menu.js):
-// capturing keydown/keyup listeners on the window, before the screen's own on
-// the document, and on each plugin frame's window (T551MPower.attach).
+// dark, locked, vibrate}): a tap opens the hotspot page as before; held for
+// `hold` ms the motor pulses once and the hotspot turns on or off (the
+// release then does nothing more), with the keys locked too when `locked`
+// (the screen stays dark, a tap still does nothing).  With "page", or the app
+// removed (no /mode) the key is the screen's own again.  Like the power menu (power-menu.js):
+// capturing keydown/keyup listeners on the window -- index.html's, added
+// before mobile.js's lock screen ones -- and on each plugin frame's window
+// (T551MPower.attach).
 let sidekeyMode = null, sidekeyAt = -Infinity, sidekeyHeld = null, sidekeyPass = false;
 function sidekeyFetch() {
 	sidekeyAt = performance.now();
@@ -18,7 +20,7 @@ function sidekeyCancel() { if (sidekeyHeld) clearTimeout(sidekeyHeld.timer); sid
 // held long enough: the hotspot on or off
 function sidekeyToggle(m) {
 	if (blank && !m.dark) {                       // only wakes the screen
-		setBlank(false);
+		if (!locked) setBlank(false);             // (locked: stays dark)
 		return;
 	}
 	if (!last || !last.wifi) return;              // no status yet
@@ -48,6 +50,7 @@ function sidekeyTap(fromFrame) {
 		finally { sidekeyPass = false; }
 		return;
 	}
+	if (locked) return;                           // the keys locked: a tap does nothing
 	if (blank) {
 		setBlank(false);
 		toApp({ e5: 'blank', on: false });
@@ -72,7 +75,9 @@ function sidekeyKey(e, fromFrame) {
 		}
 		if (performance.now() - sidekeyAt > 5000) sidekeyFetch();   // (this press uses the last answer)
 		const m = sidekeyMode;
-		if (!m || !m.toggle || locked || e.repeat) return;   // the screen's own handling
+		// the screen's own handling; with the keys locked (power then *, or
+		// the volkeys app's cut-off) only a hold is ours, and only if allowed
+		if (!m || !m.toggle || (locked && !m.locked) || e.repeat) return;
 		e.preventDefault();
 		e.stopImmediatePropagation();
 		const press = sidekeyHeld = { fired: false, timer: null };
@@ -97,7 +102,10 @@ function sidekeyAttach(win, fromFrame) {
 	win.addEventListener('keydown', (e) => sidekeyKey(e, fromFrame), true);
 	win.addEventListener('keyup', (e) => sidekeyKey(e, fromFrame), true);
 }
-sidekeyAttach(window, false);
+// the main window: through index.html's early listener (before mobile.js's
+// lock screen) when it is there, else listeners of our own
+window.e5Sidekey = (e) => sidekeyKey(e, false);
+if (!window.e5SidekeyEarly) sidekeyAttach(window, false);
 {
 	const attach = T551MPower.attach;
 	T551MPower.attach = (win) => { attach(win); sidekeyAttach(win, true); };
