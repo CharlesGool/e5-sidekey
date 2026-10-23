@@ -4,9 +4,10 @@
 // listener), so this patches app.js with patch.js, put in before the key lock:
 // its listeners come before the screen's, ask GET /mode, and take the key
 // when it is ours.  The lock screen (mobile.js) takes every key but power and
-// volume with a listener added before app.js's, so index.html gets early.html
-// too, before mobile.js: a listener ahead of it that hands the key to app.js's
-// block.  An image update brings unpatched files: the notification poll
+// volume with a listener added before app.js's, and with the screen dark so does
+// power-menu.js ("only power wakes a dark lock", before mobile.js), so index.html
+// gets early.html too, before power-menu.js (v1.4; before mobile.js where there
+// is none): a listener ahead of them that hands the key to app.js's block.  An image update brings unpatched files: the notification poll
 // (manifest "notifications") patches them again; the screen restarts once
 // after each patch, to load it.  With the app removed there is no /mode and
 // the key is the screen's own again; POST /unpatch takes the blocks out.
@@ -29,8 +30,10 @@ const MODES = [ 'toggle', 'page' ];
 const FILES = [
 	{ file: `${WWW}/app.js`, block: 'patch.js', anchor: '/* ---------- key lock ---------- */',
 	  begin: '/* BEGIN e5-sidekey', end: '/* END e5-sidekey */\n', need: true },
-	// (a screen without mobile.js has no lock screen: nothing to get ahead of)
-	{ file: `${WWW}/index.html`, block: 'early.html', anchor: '<script src="mobile.js"></script>',
+	// (the first of the anchors there: power-menu.js, else mobile.js; a screen
+	// without either has no key filter to get ahead of)
+	{ file: `${WWW}/index.html`, block: 'early.html',
+	  anchors: [ '<script src="power-menu.js"></script>', '<script src="mobile.js"></script>' ],
 	  begin: '<script>/* BEGIN e5-sidekey', end: '/* END e5-sidekey */</script>\n', need: false }
 ];
 
@@ -84,11 +87,14 @@ return function(ctx) {
 			src = strip(f, src);            // an older block: out first
 			if (src == null) return { patched: false, error: `${f.file}: cannot remove the older patch` };
 		}
-		if (count(src, f.anchor) != 1)
+		let anchor = null;
+		for (let a in (f.anchors ?? [ f.anchor ]))
+			if (count(src, a) == 1) { anchor = a; break; }
+		if (anchor == null)
 			return f.need ? { patched: false, error: `${f.file}: no single place for the patch` } : { absent: true };
 		if (!fix) return { patched: false };
-		let parts = split(src, f.anchor);
-		if (!write(f.file, parts[0] + want + f.anchor + parts[1]))
+		let parts = split(src, anchor);
+		if (!write(f.file, parts[0] + want + anchor + parts[1]))
 			return { patched: false, error: `cannot write ${f.file}` };
 		return { patched: true, current: true, changed: true };
 	}

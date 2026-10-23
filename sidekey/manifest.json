@@ -1,7 +1,7 @@
 {
 	"id": "sidekey",
 	"api_version": 2,
-	"version": "1.3",
+	"version": "1.4",
 	"name": { "zh": "侧键开关热点", "en": "Side Key Hotspot" },
 	"description": { "zh": "单击侧键打开热点页，长按震动并开关热点", "en": "Tap the side key for the hotspot page, hold it to turn the hotspot on or off" },
 	"entry": "index.html",

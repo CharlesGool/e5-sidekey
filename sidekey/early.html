@@ -1,8 +1,10 @@
 <script>/* BEGIN e5-sidekey (the sidekey app, /etc/e5-infoscreen/plugins/sidekey) */
-// The side key, before mobile.js: its lock screen takes every key but power
-// and volume with a capturing listener on the window, added before app.js's
-// (where the sidekey block is), so this one comes first and hands the key to
-// window.e5Sidekey (set by app.js).
+// The side key, before power-menu.js (v1.4) and mobile.js: with the screen dark
+// power-menu.js takes every key but power and volume ("only power wakes a dark
+// lock"), and mobile.js's lock screen every key but power and volume, both with
+// capturing listeners on the window added before app.js's (where the sidekey
+// block is); this one comes first and hands the key to window.e5Sidekey (set by
+// app.js), which takes only a hold -- a tap is given back to them as before.
 window.e5SidekeyEarly = true;
 for (const type of ['keydown', 'keyup'])
 	window.addEventListener(type, (e) => { if (window.e5Sidekey) window.e5Sidekey(e); }, true);
